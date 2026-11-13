@@ -1,0 +1,18 @@
+# Hand-written catalog for this path or git source.
+# Noctalia skips directory scanning when catalog.toml is present, so this row
+# has to stay in step with freeclip/plugin.toml. The host still re-reads the
+# plugin manifest when the plugin is enabled.
+
+[[plugin]]
+id = "zigzag/freeclip"
+name = "FreeClip 2"
+version = "0.1.0"
+updated_at = 1794580903
+added_at = 1794580903
+author = "zigzag"
+license = "MIT"
+icon = "headphones"
+description = "Battery, equalizer, gestures, and dual-device controls for HUAWEI FreeClip 2."
+deprecated = false
+plugin_api = 43
+tags = ["bluetooth", "audio", "hardware"]

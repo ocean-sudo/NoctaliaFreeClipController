@@ -1,0 +1,153 @@
+{
+  "settings": {
+    "binary_path": {
+      "label": "freeclipd path",
+      "description": "Absolute path or a path starting with ~. Empty uses the bundled binary, then freeclipd on PATH."
+    },
+    "device_address": {
+      "label": "Device address",
+      "description": "Bluetooth address to use instead of the HUAWEI FreeClip 2 name match. Empty discovers automatically."
+    },
+    "low_battery_notify": {
+      "label": "Low battery notification",
+      "description": "Notify once when either earbud drops to the threshold. It arms again after the level rises 5 points."
+    },
+    "low_battery_percent": {
+      "label": "Low battery threshold",
+      "description": "Percent at which the bar text turns to the error color and the notification fires."
+    },
+    "battery_style": {
+      "label": "Battery text",
+      "description": "Which charge level the bar shows.",
+      "options": {
+        "min": "Lowest",
+        "left": "Left",
+        "right": "Right",
+        "both": "Left, right, and case"
+      }
+    },
+    "show_case": {
+      "label": "Include the case",
+      "description": "Count the case when showing the lowest level, and append it in the left/right/case layout."
+    },
+    "hide_when_disconnected": {
+      "label": "Hide when disconnected",
+      "description": "Hide the bar widget unless the daemon is starting, connecting, ready, or reconnecting."
+    }
+  },
+  "phase": {
+    "starting": "Starting",
+    "unavailable": "Bluetooth unavailable",
+    "searching": "Searching",
+    "paired": "Paired, audio off",
+    "connecting": "Connecting",
+    "ready": "Ready",
+    "reconnecting": "Reconnecting"
+  },
+  "action": {
+    "off": "Off",
+    "pause": "Play / pause",
+    "next": "Next track",
+    "previous": "Previous track",
+    "assistant": "Voice assistant",
+    "volume_up": "Volume up",
+    "volume_down": "Volume down",
+    "noise_cycle": "Cycle noise control",
+    "volume": "Volume",
+    "off_on": "Off and on",
+    "off_on_aware": "Off, on, and aware",
+    "on_aware": "On and aware",
+    "off_aware": "Off and aware"
+  },
+  "eq": {
+    "default": "Default",
+    "hardbass": "Hard bass",
+    "treble": "Treble",
+    "voice": "Voice"
+  },
+  "quality": {
+    "connectivity": "Prioritize connection",
+    "quality": "Prioritize quality"
+  },
+  "error": {
+    "binary": "freeclipd was not found. Build it with make, or set its path in the plugin settings.",
+    "stream": "The daemon stream did not start."
+  },
+  "widget": {
+    "tooltip": {
+      "phase": "Status",
+      "left": "Left",
+      "right": "Right",
+      "case": "Case",
+      "wearing": "Wearing",
+      "error": "Error",
+      "unknown": "Unknown"
+    },
+    "wearing": {
+      "on": "On",
+      "off": "Off"
+    }
+  },
+  "notify": {
+    "low_battery_title": "FreeClip 2 battery low",
+    "low_battery_body": "An earbud is at {percent}%.",
+    "command_failed": "FreeClip 2 command failed"
+  },
+  "shortcut": {
+    "on": "Low latency on",
+    "off": "Low latency off"
+  },
+  "panel": {
+    "title": "FreeClip 2",
+    "close": "Close",
+    "refresh": "Refresh",
+    "phase": "Status",
+    "address": "Address",
+    "left": "Left",
+    "right": "Right",
+    "case": "Case",
+    "charging": "Charging",
+    "wearing": "Wearing",
+    "wearing_on": "In ear",
+    "wearing_off": "Out",
+    "wearing_unknown": "Unknown until the headset reports it",
+    "equalizer": "Equalizer",
+    "quality": "Sound quality",
+    "latency": "Low latency",
+    "auto_pause": "Pause when removed",
+    "gestures": "Gestures",
+    "double_left": "Double-tap left",
+    "double_right": "Double-tap right",
+    "triple_left": "Triple-tap left",
+    "triple_right": "Triple-tap right",
+    "long_tap": "Long tap",
+    "swipe": "Swipe",
+    "noise": "Noise control",
+    "dual": "Dual device",
+    "dual_enabled": "Allow two devices",
+    "connect": "Connect",
+    "disconnect": "Disconnect",
+    "prefer": "Prefer",
+    "preferred": "Preferred",
+    "auto": "Auto-connect",
+    "auto_on": "Auto-connect on",
+    "playing": "Playing",
+    "unpair": "Unpair",
+    "no_devices": "No paired phones yet.",
+    "language": "Voice language",
+    "volume": "System volume",
+    "mute": "Mute",
+    "unmute": "Unmute",
+    "volume_hint": "Reading the system volume…",
+    "bluetooth": "Bluetooth",
+    "audio": "Audio",
+    "not_connected": "The vendor channel is down. Pair and connect audio from the Bluetooth page. This plugin does not connect the headset itself.",
+    "firmware": "Firmware",
+    "serial": "Serial",
+    "model": "Model",
+    "hardware": "Hardware",
+    "unknown": "Unknown",
+    "connected": "Connected",
+    "offline": "Off"
+  }
+}

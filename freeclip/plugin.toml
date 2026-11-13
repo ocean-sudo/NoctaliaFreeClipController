@@ -1,0 +1,90 @@
+id = "zigzag/freeclip"
+name = "FreeClip 2"
+version = "0.1.0"
+plugin_api = 43
+author = "zigzag"
+license = "MIT"
+dependencies = ["bluez"]
+tags = ["bluetooth", "audio", "hardware"]
+icon = "headphones"
+description = "Battery, equalizer, gestures, and dual-device controls for HUAWEI FreeClip 2."
+
+# Shared by the service, bar widget, panel, and shortcut.
+[[setting]]
+key = "binary_path"
+type = "string"
+label_key = "settings.binary_path.label"
+description_key = "settings.binary_path.description"
+default = ""
+
+[[setting]]
+key = "device_address"
+type = "string"
+label_key = "settings.device_address.label"
+description_key = "settings.device_address.description"
+default = ""
+
+[[setting]]
+key = "low_battery_notify"
+type = "bool"
+label_key = "settings.low_battery_notify.label"
+description_key = "settings.low_battery_notify.description"
+default = true
+
+[[setting]]
+key = "low_battery_percent"
+type = "int"
+label_key = "settings.low_battery_percent.label"
+description_key = "settings.low_battery_percent.description"
+default = 15
+min = 5
+max = 50
+
+[[service]]
+id = "daemon"
+entry = "service.luau"
+
+[[widget]]
+id = "battery"
+entry = "widget.luau"
+
+  [[widget.setting]]
+  key = "battery_style"
+  type = "select"
+  label_key = "settings.battery_style.label"
+  description_key = "settings.battery_style.description"
+  default = "min"
+  options = [
+    { value = "min", label_key = "settings.battery_style.options.min" },
+    { value = "left", label_key = "settings.battery_style.options.left" },
+    { value = "right", label_key = "settings.battery_style.options.right" },
+    { value = "both", label_key = "settings.battery_style.options.both" },
+  ]
+
+  [[widget.setting]]
+  key = "show_case"
+  type = "bool"
+  label_key = "settings.show_case.label"
+  description_key = "settings.show_case.description"
+  default = false
+
+  [[widget.setting]]
+  key = "hide_when_disconnected"
+  type = "bool"
+  label_key = "settings.hide_when_disconnected.label"
+  description_key = "settings.hide_when_disconnected.description"
+  default = true
+
+[[panel]]
+id = "panel"
+entry = "panel.luau"
+width = 400
+height = 560
+placement = "attached"
+position = "auto"
+open_near_click = true
+dismiss_on_outside_click = true
+
+[[shortcut]]
+id = "latency"
+entry = "shortcut.luau"
