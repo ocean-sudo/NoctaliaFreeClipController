@@ -1,0 +1,25 @@
+[package]
+name = "freeclipd"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Lightweight HUAWEI FreeClip 2 SPP daemon for Noctalia"
+publish = false
+
+[[bin]]
+name = "freeclipd"
+path = "src/main.rs"
+
+[dependencies]
+bluer = { version = "0.17", features = ["bluetoothd", "rfcomm"] }
+libc = "0.2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+opt-level = "z"
+strip = true
+panic = "abort"
