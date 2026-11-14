@@ -394,13 +394,18 @@ fn place_buds(buds: &mut [Bud], raw: [u8; 2]) {
         return;
     }
     if let Some(level) = levels[0].or(levels[1]) {
-        // One slot is silent. Do not call the bud that is still reporting a
-        // left or right ear: this headset does not identify the side then.
-        // The silent bud is the one in the case. Keep its last real charge.
+        // One slot is silent. That bud is in the case and keeps its last
+        // charge. The slot that still reports is that ear: index 0 is left,
+        // index 1 is right. A 0 is not a side and is not 0% charge.
         let reporter = pick_reporter(buds, level);
         let other = if reporter == 0 { 1 } else { 0 };
+        let position = if levels[0].is_some() {
+            BudPlace::Left
+        } else {
+            BudPlace::Right
+        };
         buds[reporter].level = Some(level);
-        buds[reporter].position = BudPlace::Unknown;
+        buds[reporter].position = position;
         buds[other].position = BudPlace::Case;
         return;
     }
@@ -975,7 +980,7 @@ mod tests {
                 vec![(1, vec![86]), (2, vec![0, 86, 93]), (3, vec![0, 0, 0])],
             ),
         );
-        assert_eq!(bud(&model, 1).position, BudPlace::Unknown);
+        assert_eq!(bud(&model, 1).position, BudPlace::Right);
         assert_eq!(bud(&model, 1).level, Some(86));
         assert_eq!(bud(&model, 2).position, BudPlace::Case);
         assert_eq!(bud(&model, 2).level, None);
@@ -992,7 +997,7 @@ mod tests {
         // second, and the bud that goes into the case becomes 0. Names stay.
         let mut model = Model::new();
         feed(&mut model, 0, 84, 93, 84);
-        assert_eq!(bud(&model, 1).position, BudPlace::Unknown);
+        assert_eq!(bud(&model, 1).position, BudPlace::Right);
         assert_eq!(bud(&model, 1).level, Some(84));
         assert_eq!(bud(&model, 2).position, BudPlace::Case);
 
@@ -1010,8 +1015,18 @@ mod tests {
         feed(&mut model, 0, 100, 93, 100);
         assert_eq!(bud(&model, 1).position, BudPlace::Case);
         assert_eq!(bud(&model, 1).level, Some(83));
-        assert_eq!(bud(&model, 2).position, BudPlace::Unknown);
+        assert_eq!(bud(&model, 2).position, BudPlace::Right);
         assert_eq!(bud(&model, 2).level, Some(100));
+
+        // 17:44: the 97 bud stayed in the right slot and the other became 0.
+        let mut worn = Model::new();
+        feed(&mut worn, 97, 100, 90, 97);
+        feed(&mut worn, 100, 97, 90, 97);
+        feed(&mut worn, 0, 97, 90, 97);
+        assert_eq!(bud(&worn, 1).position, BudPlace::Right);
+        assert_eq!(bud(&worn, 1).level, Some(97));
+        assert_eq!(bud(&worn, 2).position, BudPlace::Case);
+        assert_eq!(bud(&worn, 2).level, Some(100));
 
         feed(&mut model, 0, 0, 90, 0);
         assert_eq!(bud(&model, 1).position, BudPlace::Case);

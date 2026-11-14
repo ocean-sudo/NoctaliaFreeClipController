@@ -63,7 +63,7 @@ type = "zigzag/freeclip:battery"
 - Left click the bar widget toggles this panel next to the widget. Right click asks the daemon to refresh. Scroll changes the system volume by 5% per detent.
 - The panel front page shows battery and the low-latency switch. That page hugs its content, up to 560. The settings page, and a dual-device page with several peers, scroll inside that cap. Sound (equalizer, quality, and voice language) and dual-device pairing each open on their own page. Gestures, pause-when-removed, and the model and serial numbers share the settings page opened by the gear immediately left of refresh. Unpair is the destructive button.
 - The shortcut tile toggles low latency. Right click opens the panel.
-- The two earbuds stay Earbud 1 and Earbud 2. They sit in the left or right column only while both slots are reporting. In the case, or when only one bud is reporting, neither is labeled as an ear. The case has its own charge. A slot byte of 0 is not shown as 0%, and parameter 3 is not treated as charging.
+- The two earbuds stay Earbud 1 and Earbud 2. A bud that is still reporting stays in the left or right column of its slot. A slot byte of 0 is the bud in the case: it is not labeled as an ear and it is not shown as 0%. The case has its own charge. Parameter 3 is not treated as charging.
 - Low battery notifies once per dip, and only for a bud that is reporting now. The last charge stored for a bud in the case is ignored, and so is a reported 0. It arms again after the level rises more than 5 points above the threshold.
 - Every SPP frame is appended to `~/.local/state/noctalia-freeclip/packets.log`, or under `XDG_STATE_HOME` when that is set. `FREECLIP_DEBUG=0` turns the log off. The file rotates to `packets.log.1` after 1MB.
 
