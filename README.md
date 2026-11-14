@@ -40,9 +40,22 @@ make check
 
 ## 安装
 
-下面的启用命令需要 Noctalia 正在运行。本仓库没有替你执行启用。
+这个仓库同时是 Noctalia 的插件源和 `freeclipd` 的源码。Noctalia 只加载 `catalog.toml` 里的 `freeclip/`，不会把 `daemon/` 当成插件。二进制不进 git。启用命令需要 Noctalia 正在运行，本仓库没有替你执行启用。
 
-用路径源，在仓库根目录：
+先装守护进程。它进 `~/.cargo/bin`，插件在找不到自带二进制时会用 `PATH` 上的 `freeclipd`：
+
+```sh
+cargo install --git https://github.com/ocean-sudo/NoctaliaFreeClipController freeclipd
+```
+
+再用 git 源启用插件：
+
+```sh
+noctalia msg plugins source add freeclip git https://github.com/ocean-sudo/NoctaliaFreeClipController
+noctalia msg plugins enable zigzag/freeclip
+```
+
+本地开发可以用路径源，在仓库根目录：
 
 ```sh
 noctalia msg plugins source add freeclip path "$PWD"
@@ -75,9 +88,9 @@ noctalia msg plugin zigzag/freeclip:daemon all refresh
 noctalia msg plugin zigzag/freeclip:daemon all latency toggle
 ```
 
-## 还没在耳机上验证的部分
+## 限制
 
-单元测试锁住了帧格式、CRC，以及电量、自动暂停、双击、滑动的捕获包。`cargo test` 和 `clippy -D warnings` 在 rustc 1.100 上通过了。没有耳机，所以 SPP 会话、BlueZ 发现和 Noctalia 里的实际加载都还没跑过。
+单元测试锁住了帧格式、CRC，以及电量、自动暂停、双击、滑动的捕获包。`cargo test` 和 `clippy -D warnings` 在 rustc 1.100 上通过了。SPP 已在一台已配对的 FreeClip 2 上用过。发现设备时没有超时，蓝牙枚举如果卡住会一直等。
 
 FreeClip 2 的降噪读取预期会超时，超时后面板不显示该项，连接保持。佩戴状态在耳机主动上报之前是未知。当前语音语言有时要设置一次才会出现。名称匹配只认包含 `FreeClip 2` 的设备，不会误连 FreeClip 1 或 Pro。
 

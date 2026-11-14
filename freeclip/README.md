@@ -35,7 +35,20 @@ make check   # cargo test and noctalia plugins lint
 
 ## Install
 
-Path source, from the repository root. Noctalia has to be running before `enable`:
+Install the daemon onto `PATH`. The plugin uses `freeclipd` from `PATH` when `freeclip/bin/freeclipd` is absent:
+
+```sh
+cargo install --git https://github.com/ocean-sudo/NoctaliaFreeClipController freeclipd
+```
+
+Git source. Noctalia has to be running before `enable`:
+
+```sh
+noctalia msg plugins source add freeclip git https://github.com/ocean-sudo/NoctaliaFreeClipController
+noctalia msg plugins enable zigzag/freeclip
+```
+
+Path source, from a local checkout:
 
 ```sh
 noctalia msg plugins source add freeclip path "$PWD"
@@ -96,7 +109,7 @@ Bar widget settings:
 
 ## Limits
 
-SPP has not been tested against a headset. Unit tests cover the frame codec and the captured battery, auto-pause, double-tap, and swipe packets. Noise control is expected to time out on this open-ear model and is then hidden. Wearing stays unknown until the headset sends it. The current voice language can stay empty until it is set. The daemon only matches a name containing `FreeClip 2`, not FreeClip 1 or Pro.
+Unit tests cover the frame codec and the captured battery, auto-pause, double-tap, and swipe packets. SPP has been used with a paired FreeClip 2. Device discovery has no timeout, so a stuck Bluetooth enumeration waits forever. Noise control is expected to time out on this open-ear model and is then hidden. Wearing stays unknown until the headset sends it. The current voice language can stay empty until it is set. The daemon only matches a name containing `FreeClip 2`, not FreeClip 1 or Pro.
 
 ## License
 
