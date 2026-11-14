@@ -628,7 +628,8 @@ render = function()
       ui.scroll({ key = "body-scroll", flexGrow = 1, gap = 14, align = "stretch" }, body),
     })
   else
-    bodyNode = ui.column({ key = "body-fit", gap = 14, align = "stretch" }, body)
+    -- A fill stays on a reused column after the prop is removed.
+    bodyNode = ui.column({ key = "body-plain", gap = 14, align = "stretch" }, body)
   end
 
   panel.render(ui.column({ key = "root-" .. page, gap = 12, align = "stretch" }, {
