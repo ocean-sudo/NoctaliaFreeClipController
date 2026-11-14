@@ -79,7 +79,9 @@ entry = "widget.luau"
 id = "panel"
 entry = "panel.luau"
 width = 400
-height = 560
+# Size the card to the page. max_height is the cap; taller pages scroll.
+height = "content"
+max_height = 560
 placement = "attached"
 position = "auto"
 open_near_click = true

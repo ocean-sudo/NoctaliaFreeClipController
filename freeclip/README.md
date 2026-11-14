@@ -61,7 +61,7 @@ type = "zigzag/freeclip:battery"
 ## Usage
 
 - Left click the bar widget toggles this panel next to the widget. Right click asks the daemon to refresh. Scroll changes the system volume by 5% per detent.
-- The panel front page shows battery and the low-latency switch. Sound (equalizer, quality, and voice language) and dual-device pairing each open on their own page. Gestures, pause-when-removed, and the model and serial numbers share the settings page opened by the gear immediately left of refresh. Unpair is the destructive button.
+- The panel front page shows battery and the low-latency switch. The card follows its content, up to 560. Sound (equalizer, quality, and voice language) and dual-device pairing each open on their own page. Gestures, pause-when-removed, and the model and serial numbers share the settings page opened by the gear immediately left of refresh. Unpair is the destructive button.
 - The shortcut tile toggles low latency. Right click opens the panel.
 - Low battery notifies once per dip, for the earbuds only. It arms again after the level rises more than 5 points above the threshold.
 
