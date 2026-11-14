@@ -323,6 +323,21 @@ pub fn apply_battery(model: &mut Model, packet: &Packet) {
     if let Some(flags) = packet.param(3) {
         model.snap.battery.charging = Some(flags.contains(&0x01));
     }
+    // A bud in the closed case is reported as 0 while `global` keeps tracking
+    // the ear that is still on. That 0 is not a measured charge.
+    hide_unmeasured_zero(&mut model.snap.battery);
+}
+
+fn hide_unmeasured_zero(battery: &mut Battery) {
+    let (Some(left), Some(right), Some(global)) = (battery.left, battery.right, battery.global)
+    else {
+        return;
+    };
+    if left == 0 && right > 0 && global.abs_diff(right) <= 5 {
+        battery.left = None;
+    } else if right == 0 && left > 0 && global.abs_diff(left) <= 5 {
+        battery.right = None;
+    }
 }
 
 pub fn apply_info(model: &mut Model, packet: &Packet) {
@@ -793,6 +808,23 @@ mod tests {
         let json = serde_json::to_string(&model.snap.battery).unwrap();
         assert!(json.contains("\"case\":48"), "{json}");
         assert_eq!(model.snap.battery.charging, Some(true));
+    }
+
+    #[test]
+    fn zero_on_one_side_is_unmeasured_when_global_follows_the_other() {
+        let mut model = Model::new();
+        apply_battery(
+            &mut model,
+            &Packet::new(
+                CMD_BATTERY,
+                vec![(1, vec![86]), (2, vec![0, 86, 93]), (3, vec![0, 0, 0])],
+            ),
+        );
+        assert_eq!(model.snap.battery.left, None);
+        assert_eq!(model.snap.battery.right, Some(86));
+        assert_eq!(model.snap.battery.case_level, Some(93));
+        assert_eq!(model.snap.battery.global, Some(86));
+        assert_eq!(model.snap.battery.charging, Some(false));
     }
 
     #[test]
