@@ -396,18 +396,15 @@ render = function()
   local hasPause = type(snap.auto_pause) == "boolean"
   local hasDual = type(dual.enabled) == "boolean" or #cards > 0
   local hasDevice = #details > 0
-  if page ~= "main" and page ~= "device" and not ready then
+  if page == "gestures" or page == "pause" or page == "device" then
+    page = "settings"
+  end
+  if not ready and page ~= "main" and page ~= "settings" then
     page = "main"
   end
   if page == "sound" and not hasSound then
     page = "main"
-  elseif page == "gestures" and #gestureList == 0 then
-    page = "main"
-  elseif page == "pause" and not hasPause then
-    page = "main"
   elseif page == "dual" and not hasDual then
-    page = "main"
-  elseif page == "device" and not hasDevice then
     page = "main"
   end
 
@@ -445,18 +442,45 @@ render = function()
         end)
       ))
     end
-  elseif page == "gestures" then
-    for _, row in ipairs(gestureList) do
-      table.insert(body, row)
+  elseif page == "settings" then
+    local wroteSettings = false
+    if hasPause then
+      table.insert(body, ui.label({
+        text = noctalia.tr("panel.pause_hint"),
+        fontSize = 12,
+        color = "on_surface_variant",
+        maxLines = 3,
+      }))
+      table.insert(body, toggleRow("auto-pause", noctalia.tr("panel.auto_pause"), snap.auto_pause == true, setBool("auto_pause")))
+      wroteSettings = true
     end
-  elseif page == "pause" then
-    table.insert(body, ui.label({
-      text = noctalia.tr("panel.pause_hint"),
-      fontSize = 12,
-      color = "on_surface_variant",
-      maxLines = 3,
-    }))
-    table.insert(body, toggleRow("auto-pause", noctalia.tr("panel.auto_pause"), snap.auto_pause == true, setBool("auto_pause")))
+    if #gestureList > 0 then
+      if wroteSettings then
+        table.insert(body, ui.separator({ key = "settings-gestures" }))
+      end
+      table.insert(body, ui.label({ text = noctalia.tr("panel.gestures"), fontWeight = "bold" }))
+      for _, row in ipairs(gestureList) do
+        table.insert(body, row)
+      end
+      wroteSettings = true
+    end
+    if hasDevice then
+      if wroteSettings then
+        table.insert(body, ui.separator({ key = "settings-device" }))
+      end
+      table.insert(body, ui.label({ text = noctalia.tr("panel.menu.device"), fontWeight = "bold" }))
+      for _, line in ipairs(details) do
+        table.insert(body, line)
+      end
+    end
+    if not hasPause and #gestureList == 0 and not hasDevice then
+      table.insert(body, ui.label({
+        text = noctalia.tr("panel.not_connected"),
+        fontSize = 12,
+        color = "on_surface_variant",
+        maxLines = 3,
+      }))
+    end
   elseif page == "dual" then
     if type(dual.enabled) == "boolean" then
       table.insert(body, toggleRow("dual-enabled", noctalia.tr("panel.dual_enabled"), dual.enabled == true, setBool("dual_connect")))
@@ -471,10 +495,6 @@ render = function()
       for _, card in ipairs(cards) do
         table.insert(body, card)
       end
-    end
-  elseif page == "device" then
-    for _, line in ipairs(details) do
-      table.insert(body, line)
     end
   else
     page = "main"
@@ -505,18 +525,9 @@ render = function()
       end
       table.insert(body, menuRow("sound", noctalia.tr("panel.menu.sound"), soundHint))
     end
-    if ready and #gestureList > 0 then
-      table.insert(body, menuRow("gestures", noctalia.tr("panel.gestures"), ""))
-    end
-    if ready and hasPause then
-      table.insert(body, menuRow("pause", noctalia.tr("panel.auto_pause"), stateWord(snap.auto_pause)))
-    end
     if ready and hasDual then
       local dualHint = #cards > 0 and tostring(#cards) or stateWord(dual.enabled)
       table.insert(body, menuRow("dual", noctalia.tr("panel.dual"), dualHint))
-    end
-    if hasDevice then
-      table.insert(body, menuRow("device", noctalia.tr("panel.menu.device"), type(info.model) == "string" and info.model or ""))
     end
     if not ready and snap.phase ~= "starting" and snap.phase ~= "connecting" and snap.phase ~= "reconnecting" then
       table.insert(body, ui.column({ key = "offline", gap = 8, align = "center", padding = 12 }, {
@@ -533,10 +544,8 @@ render = function()
 
   local pageTitle = {
     sound = noctalia.tr("panel.menu.sound"),
-    gestures = noctalia.tr("panel.gestures"),
-    pause = noctalia.tr("panel.auto_pause"),
     dual = noctalia.tr("panel.dual"),
-    device = noctalia.tr("panel.menu.device"),
+    settings = noctalia.tr("panel.settings"),
   }
   local header = {}
   if page ~= "main" then
@@ -566,6 +575,17 @@ render = function()
       color = ready and "primary" or "on_surface_variant",
       maxLines = 1,
     }),
+  }))
+  table.insert(header, ui.button({
+    key = "settings",
+    glyph = "settings",
+    variant = "ghost",
+    controlSize = "sm",
+    selected = page == "settings",
+    tooltip = noctalia.tr("panel.settings"),
+    onClick = function()
+      openPage(page == "settings" and "main" or "settings")
+    end,
   }))
   table.insert(header, ui.button({
     key = "refresh",

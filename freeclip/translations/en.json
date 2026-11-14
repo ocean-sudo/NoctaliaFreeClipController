@@ -102,6 +102,7 @@
     "close": "Close",
     "back": "Back",
     "refresh": "Refresh",
+    "settings": "Settings",
     "state_on": "On",
     "state_off": "Off",
     "phase": "Status",
