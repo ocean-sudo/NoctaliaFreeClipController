@@ -610,11 +610,10 @@ render = function()
   end
 
   -- The host lays the card out at max_height, then measures. A scroll keeps
-  -- that first height (its layout calls setSize), so a flexGrow scroll reports
-  -- the cap and the card never shrinks. Short pages are a plain column. Long
-  -- pages use a fixed box: column height is both a min and a max.
-  -- Those two keys must differ. Dropping `height` on a reused column does not
-  -- clear the min, so returning from settings left the card at the cap.
+  -- that first height, and so does the column that contained it: `height`
+  -- sets both min and max, and neither is cleared when the prop disappears.
+  -- The measured node is this root. Keying it by page throws that node away
+  -- on the way back, so the next measure is the new page's content.
   -- 560 cap, minus padding 28, header ~48, and the gap under the header.
   local bodyBudget = 448
   local tall = false
@@ -632,7 +631,7 @@ render = function()
     bodyNode = ui.column({ key = "body-fit", gap = 14, align = "stretch" }, body)
   end
 
-  panel.render(ui.column({ gap = 12, align = "stretch" }, {
+  panel.render(ui.column({ key = "root-" .. page, gap = 12, align = "stretch" }, {
     ui.row({ align = "center", justify = "space_between", gap = 8 }, header),
     bodyNode,
   }))
