@@ -180,9 +180,6 @@ local function peerCard(peer)
   if peer.preferred == true then
     table.insert(flags, noctalia.tr("panel.preferred"))
   end
-  if peer.auto_connect == true then
-    table.insert(flags, noctalia.tr("panel.auto_on"))
-  end
   local buttons = {
     ui.button({
       key = "link-" .. mac,
@@ -206,17 +203,6 @@ local function peerCard(peer)
       controlSize = "sm",
       onClick = function()
         send({ cmd = "dual", action = "prefer", mac = mac })
-      end,
-    }))
-  end
-  if type(peer.auto_connect) == "boolean" then
-    table.insert(buttons, ui.button({
-      key = "auto-" .. mac,
-      text = noctalia.tr("panel.auto"),
-      variant = "ghost",
-      controlSize = "sm",
-      onClick = function()
-        send({ cmd = "dual", action = "auto", mac = mac, value = peer.auto_connect ~= true })
       end,
     }))
   end
@@ -247,6 +233,16 @@ local function peerCard(peer)
       maxLines = 2,
     }))
   end
+  local body = {
+    ui.column({ gap = 2, align = "stretch" }, lines),
+    ui.row({ gap = 6, align = "center" }, buttons),
+  }
+  if type(peer.auto_connect) == "boolean" then
+    local autoOn = peer.auto_connect == true
+    table.insert(body, toggleRow("auto-" .. mac, noctalia.tr("panel.auto"), autoOn, function(value)
+      send({ cmd = "dual", action = "auto", mac = mac, value = value == "true" })
+    end))
+  end
   return ui.column({
     key = "peer-" .. mac,
     gap = 8,
@@ -254,10 +250,7 @@ local function peerCard(peer)
     radius = 10,
     align = "stretch",
     fill = peer.connected == true and "primary/0.12" or "on_surface/0.06",
-  }, {
-    ui.column({ gap = 2, align = "stretch" }, lines),
-    ui.row({ gap = 6, align = "center" }, buttons),
-  })
+  }, body)
 end
 
 local function openPage(name)
