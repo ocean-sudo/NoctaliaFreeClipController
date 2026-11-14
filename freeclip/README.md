@@ -16,7 +16,7 @@ The protocol facts are reimplemented from public FreeClip 2 research. This plugi
 
 - Noctalia v5 with plugin API 43 (tested against v5.4.0).
 - BlueZ, with the headset already paired. The daemon opens RFCOMM channel 1 only after BlueZ reports the headset connected. It never calls `Device.Connect`.
-- `wpctl` if you want the panel volume slider. Scrolling the bar widget and the slider both write volume through `noctalia msg`.
+- Scrolling the bar widget writes volume through `noctalia msg`. The panel does not contain a volume slider, mute button, or Bluetooth shortcut.
 - Rust stable to build the daemon (built with rustc 1.100). The committed tree does not contain the binary.
 
 ## Build
@@ -61,7 +61,7 @@ type = "zigzag/freeclip:battery"
 ## Usage
 
 - Left click the bar widget toggles this panel next to the widget. Right click asks the daemon to refresh. Scroll changes the system volume by 5% per detent.
-- The panel edits equalizer presets, gestures, low latency, pause-on-removal, sound quality, voice language, and dual-device pairing while the vendor channel is up. Unpair is the destructive button. Bluetooth and Audio open the Noctalia control center.
+- The panel front page shows battery and the low-latency switch. Equalizer, sound quality, voice language, gestures, pause-when-removed, dual-device pairing, and the model and serial numbers each open on a second page. Unpair is the destructive button.
 - The shortcut tile toggles low latency. Right click opens the panel.
 - Low battery notifies once per dip, for the earbuds only. It arms again after the level rises more than 5 points above the threshold.
 

@@ -8,10 +8,7 @@ local labels = require("./lib/labels.luau")
 
 local open = false
 local closeButton = true
-local volume = 0
-local muted = false
-local volumeKnown = false
-local polling = false
+local page = "main"
 local render
 
 local EQ_FALLBACK = { "default", "hardbass", "treble", "voice" }
@@ -263,28 +260,81 @@ local function peerCard(peer)
   })
 end
 
-local function refreshVolume()
-  if polling or not noctalia.commandExists("wpctl") then
-    return
-  end
-  polling = true
-  noctalia.runAsync({ "wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@" }, function(result)
-    polling = false
-    if not open then
-      return
-    end
-    local value = string.match(result.stdout or "", "Volume:%s*([%d%.]+)")
-    if result.exitCode == 0 and value ~= nil then
-      volume = math.max(0, math.min(100, math.floor(((tonumber(value) or 0) * 100) + 0.5)))
-      muted = string.find(result.stdout or "", "MUTED") ~= nil
-      volumeKnown = true
-      render()
-    end
-  end, 3000)
+local function openPage(name)
+  page = name
+  render()
 end
 
-local function openDesktop(page)
-  noctalia.runAsync({ "noctalia", "msg", "panel-open", "control-center", page })
+local function stateWord(value)
+  if value == true then
+    return noctalia.tr("panel.state_on")
+  end
+  if value == false then
+    return noctalia.tr("panel.state_off")
+  end
+  return ""
+end
+
+local function menuRow(key, title, hint)
+  local text = title
+  if hint ~= nil and hint ~= "" then
+    text = title .. "  ·  " .. hint
+  end
+  return ui.button({
+    key = key,
+    text = text,
+    glyph = "chevron-right",
+    variant = "outline",
+    contentAlign = "start",
+    flexGrow = 1,
+    onClick = function()
+      openPage(key)
+    end,
+  })
+end
+
+local function gestureRows(gestures, gestureOptions)
+  local rows = {}
+  for _, spec in ipairs(GESTURES) do
+    local current = gestures[spec.id]
+    local ids = withCurrent(gestureOptions[spec.options], current)
+    if #ids > 0 then
+      table.insert(rows, section(
+        spec.id,
+        noctalia.tr(spec.label),
+        choiceSelect(spec.id .. "-select", ids, current, labels.action, function(choice)
+          send({ cmd = "set", key = "gesture", gesture = spec.id, value = choice })
+        end)
+      ))
+    end
+  end
+  return rows
+end
+
+local function deviceLines(info, snap)
+  local rows = {}
+  local function add(key, label, value)
+    local line = infoLine(key, label, value)
+    if line ~= nil then
+      table.insert(rows, line)
+    end
+  end
+  add("model", noctalia.tr("panel.model"), info.model)
+  add("submodel", noctalia.tr("panel.submodel"), info.submodel)
+  add("hardware", noctalia.tr("panel.hardware"), info.hardware)
+  add("firmware", noctalia.tr("panel.firmware"), info.firmware)
+  add("serial", noctalia.tr("panel.serial"), info.serial)
+  add("serial-left", noctalia.tr("panel.serial_left"), info.left_serial)
+  add("serial-right", noctalia.tr("panel.serial_right"), info.right_serial)
+  add("address", noctalia.tr("panel.address"), snap.address)
+  if snap.audio_connected == true or snap.audio_connected == false then
+    add(
+      "audio",
+      noctalia.tr("panel.audio"),
+      snap.audio_connected == true and noctalia.tr("panel.connected") or noctalia.tr("panel.offline")
+    )
+  end
+  return rows
 end
 
 render = function()
@@ -312,33 +362,10 @@ render = function()
     }))
   end
 
-  local status = {}
-  local function addStatus(row)
-    if row ~= nil then
-      table.insert(status, row)
-    end
-  end
-  addStatus(infoLine("phase", noctalia.tr("panel.phase"), labels.phase(snap.phase)))
-  addStatus(infoLine("address", noctalia.tr("panel.address"), snap.address))
-  addStatus(infoLine(
-    "audio",
-    noctalia.tr("panel.audio"),
-    snap.audio_connected == true and noctalia.tr("panel.connected") or noctalia.tr("panel.offline")
-  ))
-  if ready then
-    local wearing = noctalia.tr("panel.wearing_unknown")
-    if snap.wearing == true then
-      wearing = noctalia.tr("panel.wearing_on")
-    elseif snap.wearing == false then
-      wearing = noctalia.tr("panel.wearing_off")
-    end
-    addStatus(infoLine("wearing", noctalia.tr("panel.wearing"), wearing))
-  end
-  table.insert(body, ui.column({ key = "status", gap = 4, align = "stretch" }, status))
-
   local left = percent(battery.left)
   local right = percent(battery.right)
   local caseLevel = percent(battery.case)
+  local batteryNode = nil
   if left ~= nil or right ~= nil or caseLevel ~= nil then
     local cells = {
       batteryCell("bat-left", "ear", noctalia.tr("panel.left"), left, threshold),
@@ -356,28 +383,42 @@ render = function()
         textAlign = "center",
       }))
     end
-    table.insert(body, ui.column({ key = "battery", gap = 6, align = "stretch" }, batteryBlock))
+    batteryNode = ui.column({ key = "battery", gap = 6, align = "stretch" }, batteryBlock)
   end
 
-  if ready then
-    if type(snap.low_latency) == "boolean" then
-      table.insert(body, toggleRow("latency", noctalia.tr("panel.latency"), snap.low_latency == true, setBool("low_latency")))
+  local gestureList = gestureRows(gestures, gestureOptions)
+  local details = deviceLines(info, snap)
+  local locales = strings(snap.language_options)
+  local cards = {}
+  local devices = type(dual.devices) == "table" and dual.devices or {}
+  for _, peer in ipairs(devices) do
+    if type(peer) == "table" then
+      local card = peerCard(peer)
+      if card ~= nil then
+        table.insert(cards, card)
+      end
     end
-    if type(snap.auto_pause) == "boolean" then
-      table.insert(body, toggleRow("auto-pause", noctalia.tr("panel.auto_pause"), snap.auto_pause == true, setBool("auto_pause")))
-    end
-    if type(dual.enabled) == "boolean" then
-      table.insert(body, toggleRow("dual-enabled", noctalia.tr("panel.dual_enabled"), dual.enabled == true, setBool("dual_connect")))
-    end
-    if type(snap.sound_quality) == "string" then
-      table.insert(body, section(
-        "quality",
-        noctalia.tr("panel.quality"),
-        choiceSelect("quality-select", withCurrent(QUALITY, snap.sound_quality), snap.sound_quality, labels.quality, function(choice)
-          send({ cmd = "set", key = "sound_quality", value = choice })
-        end)
-      ))
-    end
+  end
+  local hasSound = type(snap.sound_quality) == "string" or type(snap.equalizer) == "string" or #locales > 0
+  local hasPause = type(snap.auto_pause) == "boolean"
+  local hasDual = type(dual.enabled) == "boolean" or #cards > 0
+  local hasDevice = #details > 0
+  if page ~= "main" and page ~= "device" and not ready then
+    page = "main"
+  end
+  if page == "sound" and not hasSound then
+    page = "main"
+  elseif page == "gestures" and #gestureList == 0 then
+    page = "main"
+  elseif page == "pause" and not hasPause then
+    page = "main"
+  elseif page == "dual" and not hasDual then
+    page = "main"
+  elseif page == "device" and not hasDevice then
+    page = "main"
+  end
+
+  if page == "sound" then
     if type(snap.equalizer) == "string" then
       local eqIds = withCurrent(snap.equalizer_options, snap.equalizer)
       if #eqIds == 0 then
@@ -391,29 +432,15 @@ render = function()
         end)
       ))
     end
-
-    local gestureRows = {}
-    for _, spec in ipairs(GESTURES) do
-      local current = gestures[spec.id]
-      local ids = withCurrent(gestureOptions[spec.options], current)
-      if #ids > 0 then
-        table.insert(gestureRows, section(
-          spec.id,
-          noctalia.tr(spec.label),
-          choiceSelect(spec.id .. "-select", ids, current, labels.action, function(choice)
-            send({ cmd = "set", key = "gesture", gesture = spec.id, value = choice })
-          end)
-        ))
-      end
+    if type(snap.sound_quality) == "string" then
+      table.insert(body, section(
+        "quality",
+        noctalia.tr("panel.quality"),
+        choiceSelect("quality-select", withCurrent(QUALITY, snap.sound_quality), snap.sound_quality, labels.quality, function(choice)
+          send({ cmd = "set", key = "sound_quality", value = choice })
+        end)
+      ))
     end
-    if #gestureRows > 0 then
-      table.insert(body, ui.column({ key = "gestures", gap = 10, align = "stretch" }, {
-        ui.label({ text = noctalia.tr("panel.gestures"), fontWeight = "bold" }),
-        ui.column({ gap = 10, align = "stretch" }, gestureRows),
-      }))
-    end
-
-    local locales = strings(snap.language_options)
     if #locales > 0 then
       table.insert(body, section(
         "language",
@@ -425,164 +452,138 @@ render = function()
         end)
       ))
     end
-
-    local devices = type(dual.devices) == "table" and dual.devices or {}
-    local cards = {}
-    for _, peer in ipairs(devices) do
-      if type(peer) == "table" then
-        local card = peerCard(peer)
-        if card ~= nil then
-          table.insert(cards, card)
-        end
-      end
+  elseif page == "gestures" then
+    for _, row in ipairs(gestureList) do
+      table.insert(body, row)
     end
-    if #cards > 0 or type(dual.enabled) == "boolean" then
-      if #cards == 0 then
-        table.insert(cards, ui.label({
-          text = noctalia.tr("panel.no_devices"),
-          fontSize = 12,
-          color = "on_surface_variant",
-        }))
-      end
-      table.insert(body, ui.column({ key = "dual", gap = 8, align = "stretch" }, {
-        ui.label({ text = noctalia.tr("panel.dual"), fontWeight = "bold" }),
-        ui.column({ gap = 8, align = "stretch" }, cards),
-      }))
-    end
-  elseif snap.phase ~= "starting" and snap.phase ~= "connecting" and snap.phase ~= "reconnecting" then
-    table.insert(body, ui.column({ key = "offline", gap = 8, align = "center", padding = 12 }, {
-      ui.glyph({ name = "headphones-off", size = 36, color = "outline_variant" }),
-      ui.label({
-        text = noctalia.tr("panel.not_connected"),
-        fontWeight = "medium",
-        textAlign = "center",
-        maxLines = 3,
-      }),
+  elseif page == "pause" then
+    table.insert(body, ui.label({
+      text = noctalia.tr("panel.pause_hint"),
+      fontSize = 12,
+      color = "on_surface_variant",
+      maxLines = 3,
     }))
-  end
-
-  if noctalia.commandExists("wpctl") then
-    if volumeKnown then
-      table.insert(body, section(
-        "volume",
-        noctalia.tr("panel.volume") .. " " .. tostring(volume) .. "%",
-        ui.column({ gap = 8, align = "stretch" }, {
-          ui.slider({
-            key = "volume-slider",
-            min = 0,
-            max = 100,
-            step = 1,
-            value = volume,
-            onChange = function(value)
-              volume = math.floor(tonumber(value) or 0)
-              noctalia.runAsync({ "noctalia", "msg", "volume-set", tostring(volume) })
-            end,
-            onDragEnd = function()
-              if open then
-                render()
-              end
-            end,
-          }),
-          ui.button({
-            key = "mute",
-            text = muted and noctalia.tr("panel.unmute") or noctalia.tr("panel.mute"),
-            glyph = "volume",
-            variant = "outline",
-            controlSize = "sm",
-            onClick = function()
-              muted = not muted
-              noctalia.runAsync({ "noctalia", "msg", "volume-mute" })
-              if open then
-                render()
-              end
-            end,
-          }),
-        })
-      ))
-    else
+    table.insert(body, toggleRow("auto-pause", noctalia.tr("panel.auto_pause"), snap.auto_pause == true, setBool("auto_pause")))
+  elseif page == "dual" then
+    if type(dual.enabled) == "boolean" then
+      table.insert(body, toggleRow("dual-enabled", noctalia.tr("panel.dual_enabled"), dual.enabled == true, setBool("dual_connect")))
+    end
+    if #cards == 0 then
       table.insert(body, ui.label({
-        key = "volume-hint",
-        text = noctalia.tr("panel.volume_hint"),
+        text = noctalia.tr("panel.no_devices"),
         fontSize = 12,
         color = "on_surface_variant",
       }))
+    else
+      for _, card in ipairs(cards) do
+        table.insert(body, card)
+      end
+    end
+  elseif page == "device" then
+    for _, line in ipairs(details) do
+      table.insert(body, line)
+    end
+  else
+    page = "main"
+    if batteryNode ~= nil then
+      table.insert(body, batteryNode)
+    end
+    if ready or snap.wearing == true or snap.wearing == false then
+      local wearing = noctalia.tr("panel.wearing_unknown")
+      if snap.wearing == true then
+        wearing = noctalia.tr("panel.wearing_on")
+      elseif snap.wearing == false then
+        wearing = noctalia.tr("panel.wearing_off")
+      end
+      local wearingLine = infoLine("wearing", noctalia.tr("panel.wearing"), wearing)
+      if wearingLine ~= nil then
+        table.insert(body, wearingLine)
+      end
+    end
+    if ready and type(snap.low_latency) == "boolean" then
+      table.insert(body, toggleRow("latency", noctalia.tr("panel.latency"), snap.low_latency == true, setBool("low_latency")))
+    end
+    if ready and hasSound then
+      local soundHint = ""
+      if type(snap.equalizer) == "string" then
+        soundHint = labels.eq(snap.equalizer)
+      elseif type(snap.sound_quality) == "string" then
+        soundHint = labels.quality(snap.sound_quality)
+      end
+      table.insert(body, menuRow("sound", noctalia.tr("panel.menu.sound"), soundHint))
+    end
+    if ready and #gestureList > 0 then
+      table.insert(body, menuRow("gestures", noctalia.tr("panel.gestures"), ""))
+    end
+    if ready and hasPause then
+      table.insert(body, menuRow("pause", noctalia.tr("panel.auto_pause"), stateWord(snap.auto_pause)))
+    end
+    if ready and hasDual then
+      local dualHint = #cards > 0 and tostring(#cards) or stateWord(dual.enabled)
+      table.insert(body, menuRow("dual", noctalia.tr("panel.dual"), dualHint))
+    end
+    if hasDevice then
+      table.insert(body, menuRow("device", noctalia.tr("panel.menu.device"), type(info.model) == "string" and info.model or ""))
+    end
+    if not ready and snap.phase ~= "starting" and snap.phase ~= "connecting" and snap.phase ~= "reconnecting" then
+      table.insert(body, ui.column({ key = "offline", gap = 8, align = "center", padding = 12 }, {
+        ui.glyph({ name = "headphones-off", size = 36, color = "outline_variant" }),
+        ui.label({
+          text = noctalia.tr("panel.not_connected"),
+          fontWeight = "medium",
+          textAlign = "center",
+          maxLines = 3,
+        }),
+      }))
     end
   end
 
-  table.insert(body, ui.row({ key = "desktop", gap = 8, align = "center" }, {
-    ui.button({
-      key = "bluetooth",
-      text = noctalia.tr("panel.bluetooth"),
-      glyph = "bluetooth",
-      variant = "outline",
-      controlSize = "sm",
-      flexGrow = 1,
-      onClick = function()
-        openDesktop("bluetooth")
-      end,
-    }),
-    ui.button({
-      key = "desktop-audio",
-      text = noctalia.tr("panel.audio"),
-      glyph = "volume",
-      variant = "outline",
-      controlSize = "sm",
-      flexGrow = 1,
-      onClick = function()
-        openDesktop("audio")
-      end,
-    }),
-  }))
-
-  local details = {}
-  local detail = infoLine("model", noctalia.tr("panel.model"), info.model)
-  if detail ~= nil then
-    table.insert(details, detail)
-  end
-  detail = infoLine("hardware", noctalia.tr("panel.hardware"), info.hardware)
-  if detail ~= nil then
-    table.insert(details, detail)
-  end
-  detail = infoLine("firmware", noctalia.tr("panel.firmware"), info.firmware)
-  if detail ~= nil then
-    table.insert(details, detail)
-  end
-  detail = infoLine("serial", noctalia.tr("panel.serial"), info.serial)
-  if detail ~= nil then
-    table.insert(details, detail)
-  end
-  if #details > 0 then
-    table.insert(body, ui.column({ key = "details", gap = 4, align = "stretch" }, details))
-  end
-
-  local header = {
-    ui.column({ gap = 2, flexGrow = 1, align = "stretch" }, {
-      ui.label({
-        text = noctalia.tr("panel.title"),
-        fontSize = 16,
-        fontWeight = "bold",
-        maxLines = 1,
-      }),
-      ui.label({
-        text = (type(snap.name) == "string" and snap.name ~= "" and snap.name or "FreeClip 2")
-          .. " · "
-          .. labels.phase(snap.phase),
-        fontSize = 12,
-        color = ready and "primary" or "on_surface_variant",
-        maxLines = 1,
-      }),
-    }),
-    ui.button({
-      key = "refresh",
-      glyph = "refresh",
+  local pageTitle = {
+    sound = noctalia.tr("panel.menu.sound"),
+    gestures = noctalia.tr("panel.gestures"),
+    pause = noctalia.tr("panel.auto_pause"),
+    dual = noctalia.tr("panel.dual"),
+    device = noctalia.tr("panel.menu.device"),
+  }
+  local header = {}
+  if page ~= "main" then
+    table.insert(header, ui.button({
+      key = "back",
+      glyph = "arrow-left",
       variant = "ghost",
       controlSize = "sm",
-      tooltip = noctalia.tr("panel.refresh"),
+      tooltip = noctalia.tr("panel.back"),
       onClick = function()
-        send({ cmd = "refresh" })
+        openPage("main")
       end,
+    }))
+  end
+  table.insert(header, ui.column({ gap = 2, flexGrow = 1, align = "stretch" }, {
+    ui.label({
+      text = pageTitle[page] or noctalia.tr("panel.title"),
+      fontSize = 16,
+      fontWeight = "bold",
+      maxLines = 1,
     }),
-  }
+    ui.label({
+      text = (type(snap.name) == "string" and snap.name ~= "" and snap.name or "FreeClip 2")
+        .. " · "
+        .. labels.phase(snap.phase),
+      fontSize = 12,
+      color = ready and "primary" or "on_surface_variant",
+      maxLines = 1,
+    }),
+  }))
+  table.insert(header, ui.button({
+    key = "refresh",
+    glyph = "refresh",
+    variant = "ghost",
+    controlSize = "sm",
+    tooltip = noctalia.tr("panel.refresh"),
+    onClick = function()
+      send({ cmd = "refresh" })
+    end,
+  }))
   if closeButton then
     table.insert(header, ui.button({
       key = "close",
@@ -610,21 +611,12 @@ end)
 
 function onOpen(_context)
   open = true
+  page = "main"
   closeButton = noctalia.getSetting("shell.show_close_buttons") ~= false
-  noctalia.setUpdateInterval(4000)
-  refreshVolume()
   render()
 end
 
 function onClose()
   open = false
-  noctalia.setUpdateInterval(60000)
+  page = "main"
 end
-
-function update()
-  if open then
-    refreshVolume()
-  end
-end
-
-noctalia.setUpdateInterval(60000)
