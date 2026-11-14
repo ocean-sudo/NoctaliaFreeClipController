@@ -64,6 +64,7 @@ type = "zigzag/freeclip:battery"
 - The panel front page shows battery and the low-latency switch. That page hugs its content, up to 560. The settings page, and a dual-device page with several peers, scroll inside that cap. Sound (equalizer, quality, and voice language) and dual-device pairing each open on their own page. Gestures, pause-when-removed, and the model and serial numbers share the settings page opened by the gear immediately left of refresh. Unpair is the destructive button.
 - The shortcut tile toggles low latency. Right click opens the panel.
 - Low battery notifies once per dip, for the earbuds only. It arms again after the level rises more than 5 points above the threshold. A 0 on one side is ignored while the other side still matches the global level.
+- Every SPP frame is appended to `~/.local/state/noctalia-freeclip/packets.log`, or under `XDG_STATE_HOME` when that is set. `FREECLIP_DEBUG=0` turns the log off. The file rotates to `packets.log.1` after 1MB.
 
 ```sh
 noctalia msg panel-toggle zigzag/freeclip:panel

@@ -45,14 +45,8 @@ struct Link {
 
 impl Link {
     async fn send(&self, packet: &Packet) -> Result<(), String> {
+        spp::log_packet("tx", packet);
         let bytes = packet.encode();
-        if spp::debug_enabled() {
-            eprintln!(
-                "freeclipd: tx {:04x} ({} bytes)",
-                packet.command,
-                bytes.len()
-            );
-        }
         let mut write = self.inner.write.lock().await;
         write
             .write_all(&bytes)
@@ -231,9 +225,6 @@ impl LiveSession {
                 let Some(packet) = packet else {
                     return Err("headset closed the SPP link".into());
                 };
-                if spp::debug_enabled() {
-                    eprintln!("freeclipd: notify {:04x}", packet.command);
-                }
                 if packet.command == CMD_DUAL_CHANGED {
                     self.enumerate_dual(model).await;
                     return Ok(true);
@@ -446,9 +437,7 @@ async fn read_loop(
     loop {
         match spp::read_packet(&mut read).await {
             Ok(packet) => {
-                if spp::debug_enabled() {
-                    eprintln!("freeclipd: rx {:04x}", packet.command);
-                }
+                spp::log_packet("rx", &packet);
                 let waiter = lock_pending(&link.inner.pending).remove(&packet.command);
                 if let Some(waiter) = waiter {
                     let _ = waiter.send(packet);

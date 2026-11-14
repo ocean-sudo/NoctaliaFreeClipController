@@ -280,6 +280,9 @@ fn ctl(options: &CtlOptions) -> i32 {
 }
 
 async fn serve(options: ServeOptions) -> i32 {
+    if spp::packet_log_enabled() {
+        eprintln!("freeclipd: packet log {}", spp::packet_log_path().display());
+    }
     let socket = socket_from(
         options.socket.clone(),
         env::var_os("XDG_RUNTIME_DIR").as_deref(),

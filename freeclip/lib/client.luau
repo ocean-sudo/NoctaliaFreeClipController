@@ -42,7 +42,8 @@ function M.serveCommand()
   if bin == nil then
     return nil
   end
-  local command = M.shellQuote(bin) .. " serve"
+  -- FREECLIP_DEBUG=1 keeps the per-packet log on. FREECLIP_DEBUG=0 turns it off.
+  local command = "FREECLIP_DEBUG=1 " .. M.shellQuote(bin) .. " serve"
   local address = M.address()
   if address ~= nil then
     command = command .. " --address " .. M.shellQuote(address)
