@@ -129,29 +129,169 @@ local function setBool(key)
   end
 end
 
-local function batteryCell(key, glyphName, label, level, threshold)
-  local text = level == nil and "--" or (tostring(level) .. "%")
+-- A reported 0 is not a charge. The daemon also withholds it; this is the
+-- same guard for an older snapshot.
+local function shownLevel(value)
+  local level = percent(value)
+  if level == nil or level <= 0 or level > 100 then
+    return nil
+  end
+  return level
+end
+
+local function placeKey(position)
+  if position == "left" then
+    return "panel.left"
+  end
+  if position == "right" then
+    return "panel.right"
+  end
+  if position == "case" then
+    return "panel.in_case"
+  end
+  return "panel.unreported"
+end
+
+local function budList(battery)
+  local buds = {}
+  if type(battery.buds) ~= "table" then
+    return buds
+  end
+  for _, bud in ipairs(battery.buds) do
+    if type(bud) == "table" then
+      table.insert(buds, bud)
+    end
+  end
+  return buds
+end
+
+local function budCard(bud, threshold)
+  local level = shownLevel(bud.level)
   local low = level ~= nil and level <= threshold
-  return ui.column({ key = key, gap = 4, align = "center" }, {
-    ui.row({ align = "center", gap = 4 }, {
-      ui.glyph({ name = glyphName, size = 16, color = level == nil and "outline_variant" or "primary" }),
-      ui.label({ text = label, fontSize = 12, color = "on_surface_variant" }),
+  return ui.column({
+    key = "bud-" .. tostring(bud.id),
+    gap = 2,
+    align = "stretch",
+    padding = 6,
+    radius = 8,
+    fill = "primary/0.12",
+  }, {
+    ui.label({
+      text = noctalia.tr("panel.bud", { n = bud.id }),
+      fontSize = 12,
+      color = "primary",
     }),
     ui.label({
-      text = text,
+      text = level == nil and "—" or (tostring(level) .. "%"),
       fontSize = 16,
       fontWeight = "bold",
-      textAlign = "center",
       color = low and "error" or "on_surface",
     }),
     ui.progress({
       progress = level == nil and 0 or (level / 100),
-      width = 72,
       height = 4,
       radius = 2,
       fill = low and "error" or "primary",
     }),
   })
+end
+
+local function slotTitle(key, glyphName, text)
+  return ui.row({ key = key, align = "center", gap = 4 }, {
+    ui.glyph({ name = glyphName, size = 14, color = "primary" }),
+    ui.label({ text = text, fontSize = 13 }),
+  })
+end
+
+local function emptyMark(place)
+  return ui.label({
+    key = "empty-" .. place,
+    text = "—",
+    textAlign = "center",
+    color = "outline_variant",
+    fontSize = 14,
+  })
+end
+
+local function earSlot(place, labelKey, buds, threshold)
+  local kids = {
+    slotTitle("title-" .. place, "ear", noctalia.tr(labelKey)),
+  }
+  local count = 0
+  for _, bud in ipairs(buds) do
+    if bud.position == place then
+      table.insert(kids, budCard(bud, threshold))
+      count = count + 1
+    end
+  end
+  if count == 0 then
+    table.insert(kids, emptyMark(place))
+  end
+  return ui.column({
+    key = "slot-" .. place,
+    flexGrow = 1,
+    gap = 6,
+    align = "stretch",
+  }, kids)
+end
+
+local function caseSlot(caseLevel, buds, threshold)
+  local low = caseLevel ~= nil and caseLevel <= threshold
+  local caseText = noctalia.tr("panel.case_level")
+  if caseLevel == nil then
+    caseText = caseText .. " —"
+  else
+    caseText = caseText .. " " .. tostring(caseLevel) .. "%"
+  end
+  local kids = {
+    slotTitle("title-case", "battery", noctalia.tr("panel.case")),
+    ui.label({
+      key = "case-level",
+      text = caseText,
+      fontSize = 12,
+      color = "primary",
+    }),
+    ui.progress({
+      key = "case-bar",
+      progress = caseLevel == nil and 0 or (caseLevel / 100),
+      height = 4,
+      radius = 2,
+      fill = low and "error" or "primary",
+    }),
+  }
+  local count = 0
+  for _, bud in ipairs(buds) do
+    if bud.position == "case" then
+      table.insert(kids, budCard(bud, threshold))
+      count = count + 1
+    end
+  end
+  if count == 0 then
+    table.insert(kids, emptyMark("case"))
+  end
+  return ui.column({
+    key = "slot-case",
+    flexGrow = 1,
+    gap = 6,
+    align = "stretch",
+  }, kids)
+end
+
+local function placementText(buds)
+  local parts = {}
+  for _, bud in ipairs(buds) do
+    local place = noctalia.tr(placeKey(bud.position))
+    local level = shownLevel(bud.level)
+    local bit = noctalia.tr("panel.bud", { n = bud.id }) .. "：" .. place
+    if level ~= nil then
+      bit = bit .. " " .. tostring(level) .. "%"
+    end
+    table.insert(parts, bit)
+  end
+  if #parts == 0 then
+    return nil
+  end
+  return noctalia.tr("panel.placement") .. " · " .. table.concat(parts, " · ")
 end
 
 local function infoLine(key, label, value)
@@ -354,28 +494,31 @@ render = function()
     }))
   end
 
-  local left = percent(battery.left)
-  local right = percent(battery.right)
+  local buds = budList(battery)
   local caseLevel = percent(battery.case)
+  if caseLevel ~= nil and (caseLevel < 0 or caseLevel > 100) then
+    caseLevel = nil
+  end
   local batteryNode = nil
-  if left ~= nil or right ~= nil or caseLevel ~= nil then
-    local cells = {
-      batteryCell("bat-left", "ear", noctalia.tr("panel.left"), left, threshold),
-      batteryCell("bat-right", "ear", noctalia.tr("panel.right"), right, threshold),
-      batteryCell("bat-case", "battery", noctalia.tr("panel.case"), caseLevel, threshold),
-    }
+  if #buds > 0 or caseLevel ~= nil then
     local batteryBlock = {
-      ui.row({ align = "center", justify = "space_between" }, cells),
+      ui.row({ key = "slots", align = "stretch", gap = 8 }, {
+        earSlot("left", "panel.left", buds, threshold),
+        earSlot("right", "panel.right", buds, threshold),
+        caseSlot(caseLevel, buds, threshold),
+      }),
     }
-    if battery.charging == true then
+    local status = placementText(buds)
+    if status ~= nil then
       table.insert(batteryBlock, ui.label({
-        text = noctalia.tr("panel.charging"),
-        fontSize = 12,
-        color = "secondary",
-        textAlign = "center",
+        key = "placement-line",
+        text = status,
+        fontSize = 13,
+        color = "on_surface_variant",
+        maxLines = 3,
       }))
     end
-    batteryNode = ui.column({ key = "battery", gap = 6, align = "stretch" }, batteryBlock)
+    batteryNode = ui.column({ key = "battery", gap = 8, align = "stretch" }, batteryBlock)
   end
 
   local gestureList = gestureRows(gestures, gestureOptions)

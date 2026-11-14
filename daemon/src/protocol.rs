@@ -90,15 +90,34 @@ pub enum Request {
     },
 }
 
+/// Where one physical bud is. Left and right are only used when both slots
+/// are reporting a charge. In the case, or when the side was not reported,
+/// the bud keeps its id and is not called an ear.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum BudPlace {
+    Left,
+    Right,
+    Case,
+    Unknown,
+}
+
+/// One physical earbud. `id` stays 1 or 2 for the life of the process.
+/// `level` is the last charge it actually reported, never the unreported 0.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Bud {
+    pub id: u8,
+    pub level: Option<u8>,
+    pub position: BudPlace,
+}
+
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct Battery {
-    pub left: Option<u8>,
-    pub right: Option<u8>,
     /// Case charge. The JSON field stays `case`; `case` is a Rust keyword.
     #[serde(rename = "case")]
     pub case_level: Option<u8>,
     pub global: Option<u8>,
-    pub charging: Option<bool>,
+    pub buds: Vec<Bud>,
 }
 
 #[derive(Debug, Clone, Serialize, Default)]
@@ -313,30 +332,139 @@ pub fn info_query() -> Packet {
 
 pub fn apply_battery(model: &mut Model, packet: &Packet) {
     if let Some(level) = packet.param_u8(1) {
-        model.snap.battery.global = Some(level);
+        if level <= 100 {
+            model.snap.battery.global = Some(level);
+        }
     }
-    if let Some(levels) = packet.param(2).filter(|levels| levels.len() >= 3) {
-        model.snap.battery.left = Some(levels[0]);
-        model.snap.battery.right = Some(levels[1]);
-        model.snap.battery.case_level = Some(levels[2]);
-    }
-    if let Some(flags) = packet.param(3) {
-        model.snap.battery.charging = Some(flags.contains(&0x01));
-    }
-    // A bud in the closed case is reported as 0 while `global` keeps tracking
-    // the ear that is still on. That 0 is not a measured charge.
-    hide_unmeasured_zero(&mut model.snap.battery);
-}
-
-fn hide_unmeasured_zero(battery: &mut Battery) {
-    let (Some(left), Some(right), Some(global)) = (battery.left, battery.right, battery.global)
-    else {
+    // Param 2 is two bud slots plus the case. The slot index is not a stable
+    // ear: the same two charges exchange places while the buds are handled.
+    // A 0 is "this slot is not reporting", which on this headset is the bud
+    // in the case, not an empty battery. Param 3 is not used. On FreeClip 2
+    // it stays 0 the whole time a bud is charging in the closed case, then
+    // flips between the slots with the readings, so it is not "charging".
+    let Some(levels) = packet.param(2).filter(|levels| levels.len() >= 3) else {
         return;
     };
-    if left == 0 && right > 0 && global.abs_diff(right) <= 5 {
-        battery.left = None;
-    } else if right == 0 && left > 0 && global.abs_diff(left) <= 5 {
-        battery.right = None;
+    if levels[2] <= 100 {
+        model.snap.battery.case_level = Some(levels[2]);
+    }
+    if model.snap.battery.buds.len() != 2 {
+        model.snap.battery.buds = vec![
+            Bud {
+                id: 1,
+                level: None,
+                position: BudPlace::Unknown,
+            },
+            Bud {
+                id: 2,
+                level: None,
+                position: BudPlace::Unknown,
+            },
+        ];
+    }
+    place_buds(&mut model.snap.battery.buds, [levels[0], levels[1]]);
+}
+
+fn measured(value: u8) -> Option<u8> {
+    (1..=100).contains(&value).then_some(value)
+}
+
+/// How far `level` is from this bud's last real reading. An unseen bud is a
+/// worse match than about 40 points of ordinary drift.
+fn distance(bud: &Bud, level: u8) -> u16 {
+    match bud.level {
+        Some(previous) => u16::from(previous.abs_diff(level)),
+        None => 40,
+    }
+}
+
+fn place_buds(buds: &mut [Bud], raw: [u8; 2]) {
+    let levels = [measured(raw[0]), measured(raw[1])];
+    if let (Some(first), Some(second)) = (levels[0], levels[1]) {
+        let pair = [first, second];
+        let assign = assign_both(buds, pair);
+        let placed = [
+            (assign[0], pair[0], BudPlace::Left),
+            (assign[1], pair[1], BudPlace::Right),
+        ];
+        for (index, level, position) in placed {
+            buds[index].level = Some(level);
+            buds[index].position = position;
+        }
+        return;
+    }
+    if let Some(level) = levels[0].or(levels[1]) {
+        // One slot is silent. Do not call the bud that is still reporting a
+        // left or right ear: this headset does not identify the side then.
+        // The silent bud is the one in the case. Keep its last real charge.
+        let reporter = pick_reporter(buds, level);
+        let other = if reporter == 0 { 1 } else { 0 };
+        buds[reporter].level = Some(level);
+        buds[reporter].position = BudPlace::Unknown;
+        buds[other].position = BudPlace::Case;
+        return;
+    }
+    buds[0].position = BudPlace::Case;
+    buds[1].position = BudPlace::Case;
+}
+
+fn assign_both(buds: &[Bud], levels: [u8; 2]) -> [usize; 2] {
+    if let Some(assigned) = assign_from_case(buds, levels) {
+        return assigned;
+    }
+    let stay = distance(&buds[0], levels[0]) + distance(&buds[1], levels[1]);
+    let swap = distance(&buds[0], levels[1]) + distance(&buds[1], levels[0]);
+    if swap < stay {
+        [1, 0]
+    } else {
+        [0, 1]
+    }
+}
+
+/// The bud that was out should keep the slot nearest its last reading. The
+/// bud that was in the case takes the other slot, because charging can move
+/// its level a long way before it is seen again.
+fn assign_from_case(buds: &[Bud], levels: [u8; 2]) -> Option<[usize; 2]> {
+    let case_idx = buds.iter().position(|bud| bud.position == BudPlace::Case)?;
+    if case_idx > 1 || buds.get(1 - case_idx)?.position == BudPlace::Case {
+        return None;
+    }
+    let out_idx = 1 - case_idx;
+    let previous = buds[out_idx].level?;
+    let on_first = previous.abs_diff(levels[0]);
+    let on_second = previous.abs_diff(levels[1]);
+    if on_first == on_second {
+        return None;
+    }
+    let mut assigned = [case_idx, case_idx];
+    if on_first < on_second {
+        assigned[0] = out_idx;
+        assigned[1] = case_idx;
+    } else {
+        assigned[0] = case_idx;
+        assigned[1] = out_idx;
+    }
+    Some(assigned)
+}
+
+fn pick_reporter(buds: &[Bud], level: u8) -> usize {
+    let costs = [distance(&buds[0], level), distance(&buds[1], level)];
+    let was_out = |bud: &Bud| bud.position != BudPlace::Case && bud.level.is_some();
+    let out = [was_out(&buds[0]), was_out(&buds[1])];
+    // Keep the bud that was already out unless the new reading is clearly
+    // the other one (the two buds swapped who is in the case).
+    if out[0] && !out[1] && costs[0] <= costs[1].saturating_add(8) {
+        return 0;
+    }
+    if out[1] && !out[0] && costs[1] <= costs[0].saturating_add(8) {
+        return 1;
+    }
+    if costs[0] < costs[1] {
+        0
+    } else if costs[1] < costs[0] || (out[1] && !out[0]) {
+        1
+    } else {
+        0
     }
 }
 
@@ -794,6 +922,31 @@ mod tests {
         Packet::decode(&bytes).unwrap()
     }
 
+    fn bud(model: &Model, id: u8) -> &Bud {
+        model
+            .snap
+            .battery
+            .buds
+            .iter()
+            .find(|bud| bud.id == id)
+            .unwrap()
+    }
+
+    fn feed(model: &mut Model, slot_a: u8, slot_b: u8, case_level: u8, global: u8) {
+        // Param 3 carries 0x01 on purpose. That byte is not a charging flag.
+        apply_battery(
+            model,
+            &Packet::new(
+                CMD_BATTERY,
+                vec![
+                    (1, vec![global]),
+                    (2, vec![slot_a, slot_b, case_level]),
+                    (3, vec![1, 1, 1]),
+                ],
+            ),
+        );
+    }
+
     #[test]
     fn battery_levels_come_from_the_three_parameter() {
         let mut model = Model::new();
@@ -802,16 +955,18 @@ mod tests {
             &decode("5a0014000108010140020310203003030001000402140a1461"),
         );
         assert_eq!(model.snap.battery.global, Some(0x40));
-        assert_eq!(model.snap.battery.left, Some(0x10));
-        assert_eq!(model.snap.battery.right, Some(0x20));
         assert_eq!(model.snap.battery.case_level, Some(0x30));
+        assert_eq!(bud(&model, 1).position, BudPlace::Left);
+        assert_eq!(bud(&model, 1).level, Some(0x10));
+        assert_eq!(bud(&model, 2).position, BudPlace::Right);
+        assert_eq!(bud(&model, 2).level, Some(0x20));
         let json = serde_json::to_string(&model.snap.battery).unwrap();
         assert!(json.contains("\"case\":48"), "{json}");
-        assert_eq!(model.snap.battery.charging, Some(true));
+        assert!(!json.contains("charging"), "{json}");
     }
 
     #[test]
-    fn zero_on_one_side_is_unmeasured_when_global_follows_the_other() {
+    fn zero_slot_is_in_the_case_and_is_not_called_an_ear() {
         let mut model = Model::new();
         apply_battery(
             &mut model,
@@ -820,11 +975,49 @@ mod tests {
                 vec![(1, vec![86]), (2, vec![0, 86, 93]), (3, vec![0, 0, 0])],
             ),
         );
-        assert_eq!(model.snap.battery.left, None);
-        assert_eq!(model.snap.battery.right, Some(86));
+        assert_eq!(bud(&model, 1).position, BudPlace::Unknown);
+        assert_eq!(bud(&model, 1).level, Some(86));
+        assert_eq!(bud(&model, 2).position, BudPlace::Case);
+        assert_eq!(bud(&model, 2).level, None);
         assert_eq!(model.snap.battery.case_level, Some(93));
         assert_eq!(model.snap.battery.global, Some(86));
-        assert_eq!(model.snap.battery.charging, Some(false));
+        let json = serde_json::to_string(&model.snap.battery).unwrap();
+        assert!(!json.contains("charging"), "{json}");
+        assert!(!json.contains(":0"), "{json}");
+    }
+
+    #[test]
+    fn buds_keep_identity_when_slots_swap_and_one_enters_the_case() {
+        // Times are from the 2026-11-14 packet log. Slot bytes swap within a
+        // second, and the bud that goes into the case becomes 0. Names stay.
+        let mut model = Model::new();
+        feed(&mut model, 0, 84, 93, 84);
+        assert_eq!(bud(&model, 1).position, BudPlace::Unknown);
+        assert_eq!(bud(&model, 1).level, Some(84));
+        assert_eq!(bud(&model, 2).position, BudPlace::Case);
+
+        feed(&mut model, 100, 82, 93, 82);
+        assert_eq!(bud(&model, 1).position, BudPlace::Right);
+        assert_eq!(bud(&model, 1).level, Some(82));
+        assert_eq!(bud(&model, 2).position, BudPlace::Left);
+        assert_eq!(bud(&model, 2).level, Some(100));
+
+        feed(&mut model, 100, 83, 93, 83);
+        feed(&mut model, 83, 100, 93, 83);
+        assert_eq!(bud(&model, 1).level, Some(83));
+        assert_eq!(bud(&model, 2).level, Some(100));
+
+        feed(&mut model, 0, 100, 93, 100);
+        assert_eq!(bud(&model, 1).position, BudPlace::Case);
+        assert_eq!(bud(&model, 1).level, Some(83));
+        assert_eq!(bud(&model, 2).position, BudPlace::Unknown);
+        assert_eq!(bud(&model, 2).level, Some(100));
+
+        feed(&mut model, 0, 0, 90, 0);
+        assert_eq!(bud(&model, 1).position, BudPlace::Case);
+        assert_eq!(bud(&model, 2).position, BudPlace::Case);
+        assert_eq!(bud(&model, 1).level, Some(83));
+        assert_eq!(bud(&model, 2).level, Some(100));
     }
 
     #[test]

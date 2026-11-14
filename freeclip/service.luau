@@ -35,15 +35,18 @@ local function publish(snap)
   noctalia.state.set("snapshot", snap)
 end
 
+-- Lowest bud that is reporting right now. A 0, and the last charge stored
+-- for a bud sitting in the case, are not a live reading.
 local function earLevel(battery)
-  if type(battery) ~= "table" then
+  if type(battery) ~= "table" or type(battery.buds) ~= "table" then
     return nil
   end
   local best = nil
-  for _, key in ipairs({ "left", "right" }) do
-    local value = battery[key]
-    if type(value) == "number" and (best == nil or value < best) then
-      best = value
+  for _, bud in ipairs(battery.buds) do
+    if type(bud) == "table" and bud.position ~= "case" and type(bud.level) == "number" then
+      if bud.level > 0 and bud.level <= 100 and (best == nil or bud.level < best) then
+        best = bud.level
+      end
     end
   end
   return best

@@ -18,7 +18,7 @@
     },
     "battery_style": {
       "label": "Battery text",
-      "description": "Which charge level the bar shows.",
+      "description": "Which charge level the bar shows. Left and right appear only while that side is reported.",
       "options": {
         "min": "Lowest",
         "left": "Left",
@@ -110,6 +110,11 @@
     "left": "Left",
     "right": "Right",
     "case": "Case",
+    "bud": "Earbud {n}",
+    "in_case": "In case",
+    "unreported": "Unknown",
+    "case_level": "Case battery",
+    "placement": "Placement",
     "charging": "Charging",
     "wearing": "Wearing",
     "wearing_on": "In ear",

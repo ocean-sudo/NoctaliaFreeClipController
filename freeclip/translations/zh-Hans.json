@@ -18,7 +18,7 @@
     },
     "battery_style": {
       "label": "电量文字",
-      "description": "顶栏显示哪一项电量。",
+      "description": "顶栏显示哪一项电量。左耳和右耳只在耳机上报了那一侧时才有数字。",
       "options": {
         "min": "最低",
         "left": "左耳",
@@ -110,6 +110,11 @@
     "left": "左耳",
     "right": "右耳",
     "case": "充电盒",
+    "bud": "耳机 {n}",
+    "in_case": "盒内",
+    "unreported": "未知",
+    "case_level": "盒电量",
+    "placement": "佩戴状态",
     "charging": "充电中",
     "wearing": "佩戴",
     "wearing_on": "在耳中",

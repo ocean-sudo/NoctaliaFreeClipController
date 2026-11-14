@@ -14,67 +14,97 @@ local function percent(value)
   return math.floor(value)
 end
 
+local function budList(battery)
+  local buds = {}
+  if type(battery.buds) ~= "table" then
+    return buds
+  end
+  for _, bud in ipairs(battery.buds) do
+    if type(bud) == "table" then
+      table.insert(buds, bud)
+    end
+  end
+  return buds
+end
+
+-- Live charge only. A bud in the case keeps its last reading for the panel,
+-- but that number is not what is on an ear right now.
+local function liveLevel(bud)
+  if type(bud) ~= "table" or bud.position == "case" then
+    return nil
+  end
+  local level = percent(bud.level)
+  if level == nil or level <= 0 or level > 100 then
+    return nil
+  end
+  return level
+end
+
+local function levelAt(buds, place)
+  for _, bud in ipairs(buds) do
+    if bud.position == place then
+      return liveLevel(bud)
+    end
+  end
+  return nil
+end
+
 local function collect(battery, style, showCase)
   battery = type(battery) == "table" and battery or {}
-  local values = {}
-  local left = percent(battery.left)
-  local right = percent(battery.right)
+  local buds = budList(battery)
   local caseLevel = percent(battery.case)
-  if style == "left" then
-    if left ~= nil then
-      table.insert(values, left)
-    end
-  elseif style == "right" then
-    if right ~= nil then
-      table.insert(values, right)
-    end
-  elseif style == "both" then
-    if left ~= nil then
-      table.insert(values, left)
-    end
-    if right ~= nil then
-      table.insert(values, right)
-    end
-    if showCase and caseLevel ~= nil then
-      table.insert(values, caseLevel)
+  local values = {}
+  if style == "left" or style == "right" then
+    local level = levelAt(buds, style)
+    if level ~= nil then
+      table.insert(values, level)
     end
   else
-    if left ~= nil then
-      table.insert(values, left)
-    end
-    if right ~= nil then
-      table.insert(values, right)
+    for _, bud in ipairs(buds) do
+      local level = liveLevel(bud)
+      if level ~= nil then
+        table.insert(values, level)
+      end
     end
     if showCase and caseLevel ~= nil then
       table.insert(values, caseLevel)
     end
     if #values == 0 then
       local global = percent(battery.global)
-      if global ~= nil then
+      if global ~= nil and global > 0 and global <= 100 then
         table.insert(values, global)
       end
     end
   end
-  return values, left, right, caseLevel
+  return values, buds, caseLevel
 end
 
 local function batteryText(battery, style, showCase)
-  local values, left, right, caseLevel = collect(battery, style, showCase)
+  local values, buds, caseLevel = collect(battery, style, showCase)
   if style == "both" then
     local parts = {}
-    if left ~= nil then
-      table.insert(parts, "L" .. tostring(left))
+    for _, place in ipairs({ "left", "right" }) do
+      local level = levelAt(buds, place)
+      if level ~= nil then
+        local prefix = place == "left" and "L" or "R"
+        table.insert(parts, prefix .. tostring(level))
+      end
     end
-    if right ~= nil then
-      table.insert(parts, "R" .. tostring(right))
+    for _, bud in ipairs(buds) do
+      if bud.position ~= "left" and bud.position ~= "right" then
+        local level = liveLevel(bud)
+        if level ~= nil then
+          table.insert(parts, tostring(bud.id) .. ":" .. tostring(level))
+        end
+      end
     end
     if showCase and caseLevel ~= nil then
       table.insert(parts, "C" .. tostring(caseLevel))
     end
-    return table.concat(parts, " "), values
+    return table.concat(parts, " "), values, buds, caseLevel
   end
   if #values == 0 then
-    return "", values
+    return "", values, buds, caseLevel
   end
   local lowest = values[1]
   for index = 2, #values do
@@ -82,25 +112,41 @@ local function batteryText(battery, style, showCase)
       lowest = values[index]
     end
   end
-  return tostring(lowest), values
+  return tostring(lowest), values, buds, caseLevel
 end
 
 local function shownPhase(phase)
   return phase == "starting" or phase == "connecting" or phase == "ready" or phase == "reconnecting"
 end
 
-local function tooltip(snap, left, right, caseLevel)
+local function placeLabel(position)
+  if position == "left" then
+    return noctalia.tr("panel.left")
+  end
+  if position == "right" then
+    return noctalia.tr("panel.right")
+  end
+  if position == "case" then
+    return noctalia.tr("panel.in_case")
+  end
+  return noctalia.tr("panel.unreported")
+end
+
+local function tooltip(snap, buds, caseLevel)
   local rows = {
     { noctalia.tr("widget.tooltip.phase"), labels.phase(snap.phase) },
   }
-  local function add(label, value)
-    if value ~= nil then
-      table.insert(rows, { label, tostring(value) .. "%" })
+  for _, bud in ipairs(buds) do
+    local text = placeLabel(bud.position)
+    local level = percent(bud.level)
+    if level ~= nil and level > 0 and level <= 100 then
+      text = text .. " " .. tostring(level) .. "%"
     end
+    table.insert(rows, { noctalia.tr("panel.bud", { n = bud.id }), text })
   end
-  add(noctalia.tr("widget.tooltip.left"), left)
-  add(noctalia.tr("widget.tooltip.right"), right)
-  add(noctalia.tr("widget.tooltip.case"), caseLevel)
+  if caseLevel ~= nil then
+    table.insert(rows, { noctalia.tr("widget.tooltip.case"), tostring(caseLevel) .. "%" })
+  end
   if snap.wearing == true then
     table.insert(rows, { noctalia.tr("widget.tooltip.wearing"), noctalia.tr("widget.wearing.on") })
   elseif snap.wearing == false then
@@ -128,8 +174,7 @@ local function render(snap)
     barWidget.setVisible(false)
     return
   end
-  local text, values, left, right, caseLevel = batteryText(snap.battery, style, showCase)
-  local _, leftLevel, rightLevel, caseLevelShown = collect(snap.battery, style, showCase)
+  local text, values, buds, caseLevel = batteryText(snap.battery, style, showCase)
   local low = false
   for _, value in ipairs(values) do
     if value <= threshold then
@@ -142,7 +187,7 @@ local function render(snap)
   barWidget.setText(text)
   barWidget.setColor(low and "error" or "on_surface")
   barWidget.setGlyphColor(low and "error" or (snap.spp_connected == true and "primary" or "on_surface"))
-  barWidget.setTooltip(tooltip(snap, leftLevel, rightLevel, caseLevelShown))
+  barWidget.setTooltip(tooltip(snap, buds, caseLevel))
 end
 
 noctalia.state.watch("snapshot", render)
